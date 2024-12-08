@@ -1,1 +1,2 @@
-
+from .command_register import CommandRegister
+from .callback_query_register import CallbackQueryRegister
