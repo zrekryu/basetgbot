@@ -1,14 +1,21 @@
-import logging
 import importlib
-import os
+import logging
+from pathlib import Path
 from types import ModuleType
 from typing import Self
 
+from pyrogram.filters import Filter
 from pyrogram.handlers.handler import Handler
 from pyrogram.handlers import (
-    MessageHandler
+    MessageHandler,
+    CallbackQueryHandler
     )
 from pyrogram import Client, idle
+
+from .registers import (
+    CommandRegister,
+    CallbackQueryRegister
+    )
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -47,43 +54,89 @@ class Bot(Client):
     async def idle(self: Self) -> None:
         logger.info("Bot is idling...")
         await idle()
+        logger.info("Bot has stopped idling!")
     
-    def add_message_handler(self: Self, message_handler: MessageHandler) -> None:
-        super().add_handler(message_handler)
-    
-    def import_command(self: Self, name: str) -> tuple[ModuleType, str, Handler] | None:
-        module: ModuleType = importlib.import_module(name)
-        
-        try:
-            command_name: Handler = module.command_name
-        except AttributeError:
-            raise AttributeError(f"Command module '{file}' has no attribute 'command_name'")
-        
-        try:
-            command_handler: Handler = module.command_handler
-        except AttributeError:
-            raise AttributeError(f"Command module '{file}' has no attribute 'command_handler'")
-        
-        if isinstance(command_handler, MessageHandler):
-            self.add_message_handler(command_handler)
-        else:
-            super().add_handler(command_handler)
-        
-        return module, command_name, command_handler
+    @staticmethod
+    def command_register(name: str, filters: Filter, group: int = 0) -> CommandRegister:
+        return CommandRegister.as_decorator(name, filters, group)
     
     def import_commands(self: Self) -> None:
         logger.info("Importing commands...")
-        for file in os.listdir(os.path.join(os.path.dirname(__file__), "commands")):
-            if file.startswith("__") or not file.endswith(".py"):
+        commands_dir: Path = Path(__file__).parent / "commands"
+        imported_commands: list[tuple[ModuleType, CommandRegister]] = self.import_commands_from_path(commands_dir)
+        
+        imported_command_names: str = ", ".join(
+            cmd_reg.name for _, cmd_regs in imported_commands
+            for cmd_reg in cmd_regs
+            )
+        logger.info(f"Imported command names: {imported_command_names}.")
+    
+    def import_commands_from_path(self: Self, path: Path) -> list[tuple[ModuleType, CommandRegister]]:
+        imported_commands: list[tuple[ModuleType, CommandRegister]] = []
+        for file in path.iterdir():
+            if file.name.startswith("__") or file.suffix != ".py":
                 continue
-            if not file.endswith("_cmd.py") and self.strict_cmd_py_suffix:
-                raise ValueError(f"Command file '{file}' does not ends with '_cmd.py'")
+            if file.is_dir():
+                imported_commands.extend(
+                    self.import_commands_from_path(file)
+                    )
+                continue
+            if not file.name.endswith("_cmd.py") and self.strict_cmd_py_suffix:
+                raise ValueError(f"Command file '{file.name}' does not ends with '_cmd.py'")
             
-            name: str = f"{__name__[:-3]}commands.{file[:-3]}"
+            logger.debug(f"Importing command file: {file.name}.")
+            
+            name: str = f"{__name__[:-3]}commands.{file.stem}"
             
             module: ModuleType
-            command_name: str
-            command_handler: Handler
-            module, command_name, command_handler = self.import_command(name)
+            registers: list[CommandRegister]
+            module, registers = self.import_command_registers_from_module(name)
             
-            logger.debug(f"Imported command: {command_name}")
+            logger.debug(f"Imported command file: {file.name}.")
+            
+            self.add_command_registers(registers)
+            imported_commands.append((module, registers))
+        
+        return imported_commands
+    
+    def import_command_registers_from_module(self: Self, name: str) -> tuple[ModuleType, list[CommandRegister]]:
+        module: ModuleType = importlib.import_module(name)
+        registers: list[CommandRegister] = []
+        
+        # Import command registers from list.
+        if hasattr(module, "registers"):
+            for register in module.registers:
+                if not isinstance(register, CommandRegister):
+                    raise TypeError(f"Command register '{register}' must be an instance of CommandRegister")
+                
+                registers.append(register)
+        
+        # Find and import command registers from module.
+        for value in vars(module).values():
+            if isinstance(value, CommandRegister):
+                registers.append(value)
+        
+        if not registers:
+            raise RuntimeError(f"Command module '{name}' does not define any registers")
+        
+        return (module, registers)
+    
+    def add_command_registers(self: Self, registers: list[CommandRegister]) -> None:
+        for register in registers:
+            if not isinstance(register, CommandRegister):
+                raise TypeError(f"Command register '{register}' must be an instance of CommandRegister")
+            
+            self.add_message_handler(register.handler, register.group)
+    
+    def add_callback_query_registers(self: Self, registers: list[CommandRegister]) -> None:
+        for register in registers:
+            if not isinstance(register, CommandRegister):
+                raise TypeError(f"CallbackQuery register '{register}' must be an instance of CallbackQueryRegister")
+            
+            self.add_callback_query_handler(register.handler, self.group)
+    
+    def add_message_handler(self: Self, handler: MessageHandler, group: int = 0) -> None:
+        super().add_handler(handler, group)
+    
+    def add_callback_query_handler(self: Self, handler: CallbackQueryHandler, group: int = 0) -> None:
+        super().add_handler(handler, group)

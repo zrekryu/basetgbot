@@ -22,10 +22,11 @@ class Config:
         )
     
     CLIENT_NAME: str = os.getenv("CLIENT_NAME", "tgbot")
-    API_ID: int = int(os.getenv("API_ID"))
+    API_ID: int | None = int(api_id) if (api_id := os.getenv("API_ID")) else None
     API_HASH: str = os.getenv("API_HASH")
     BOT_TOKEN: str = os.getenv("BOT_TOKEN")
     
+    LOGGER_NAME: str = os.getenv("LOGGER_NAME", "tgbot")
     LOG_LEVEL: int = int(os.getenv("LOG_LEVEL", logging.INFO))
     LOG_FILE: str = os.getenv("LOG_FILE", "tgbot.log")
     LOG_FILE_MODE: str = os.getenv("LOG_FILE_MODE", "w+")
@@ -35,4 +36,4 @@ class Config:
     MONGO_URI: str = os.getenv("MONGO_URI")
     MONGO_DBNAME: str = os.getenv("MONGO_DBNAME", "tgbot")
     
-    STRICT_CMD_PY_SUFFIX: bool = True
+    STRICT_CMD_PY_SUFFIX: bool = bool(os.getenv("STRICT_CMD_PY_SUFFIX", True))

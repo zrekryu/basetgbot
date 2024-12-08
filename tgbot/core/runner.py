@@ -21,13 +21,15 @@ class Runner:
         self.setup_logger()
     
     def get_logger(self: Self) -> logging.Logger:
-        logger: logging.Logger = logging.getLogger("tgbot")
+        logger: logging.Logger = logging.getLogger(self.config.LOGGER_NAME)
         logger.setLevel(self.config.LOG_LEVEL)
+        
+        logger.propagate = False
         
         stream_handler: logging.StreamHandler = logging.StreamHandler()
         file_handler: logging.FileHandler = logging.FileHandler(filename=self.config.LOG_FILE, mode=self.config.LOG_FILE_MODE)
         
-        formatter = logging.Formatter("[%(asctime)s] - %(levelname)s - %(name)s - %(message)s", datefmt="%d/%m/%y %H:%M:%S")
+        formatter = logging.Formatter(self.config.LOG_FORMAT, datefmt=self.config.LOG_DATEFMT)
         stream_handler.setFormatter(formatter)
         file_handler.setFormatter(formatter)
         
