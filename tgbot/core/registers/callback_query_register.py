@@ -1,30 +1,41 @@
-from typing import Any, Callable, Self
+from typing import Callable, Self
 
 from pyrogram.filters import Filter
-from pyrogram.handlers import MessageHandler
+from pyrogram.handlers import CallbackQueryHandler
 
 class CallbackQueryRegister:
     def __init__(
         self: Self,
         name: str,
+        callback: Callable,
         filters: Filter,
-        callback: Callable[[Any], Any]
+        group: int = 0
         ) -> None:
         self.name = name
-        self.filters = filters
         self.callback = callback
+        self.filters = filters
+        self.group = group
     
-    def get_handler(self: Self) -> MessageHandler:
+    @classmethod
+    def as_decorator(cls: type[Self], name: str, filters: Filter, group: int = 0) -> Callable:
+        def decorator(func: Callable) -> Self:
+            return cls(name, func, filters, group)
+        
+        return decorator
+    
+    @property
+    def handler(self: Self) -> CallbackQueryHandler:
         return CallbackQueryHandler(
-            filters=self.filters,
-            callback=self.callback
+            callback=self.callback,
+            filters=self.filters
             )
     
     def __repr__(self: Self) -> str:
         return (
             "CallbackQueryRegister("
-            f"name={self.name}"
-            f"filters={self.filters}"
-            f"callback={self.callback}"
+            f"name={self.name}, "
+            f"callback={self.callback}, "
+            f"filters={self.filters}, "
+            f"group={self.group}"
             ")"
             )

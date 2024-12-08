@@ -17,8 +17,8 @@ class CommandRegister:
         self.group = group
     
     @classmethod
-    def as_decorator(cls: type[Self], name: str, filters: Filter, group: int = 0) -> Self:
-        def decorator(func: Callable) -> CommandRegister:
+    def as_decorator(cls: type[Self], name: str, filters: Filter, group: int = 0) -> Callable:
+        def decorator(func: Callable) -> Self:
             return cls(name, func, filters, group)
         
         return decorator
