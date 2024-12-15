@@ -16,6 +16,7 @@ from .registers import (
     CommandRegister,
     CallbackQueryRegister
     )
+from .updates import Updates
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -40,6 +41,10 @@ class Bot(Client):
             api_hash=self.api_hash,
             bot_token=self.bot_token
             )
+        
+        self.updates: Updates = Updates()
+        
+        self.updates.add_update_handlers()
     
     async def start(self: Self) -> None:
         logger.info("Bot is starting...")
@@ -60,23 +65,27 @@ class Bot(Client):
     def command_register(name: str, filters: Filter, group: int = 0) -> CommandRegister:
         return CommandRegister.as_decorator(name, filters, group)
     
+    def command_names_formatted(self: Self, commands_registers: list[CommandRegister]) -> str:
+        names = [cmd_reg.name for cmd_reg in commands_registers]
+        if len(names) == 1:
+            return names[0]
+        
+        return ", ".join(names[:-1]) + ", and " + names[-1]
+    
     def import_commands(self: Self) -> None:
         logger.info("Importing commands...")
         commands_dir: Path = Path(__file__).parent / "commands"
         imported_commands: list[tuple[ModuleType, CommandRegister]] = self.import_commands_from_path(commands_dir)
         
-        imported_command_names: str = ", ".join(
-            cmd_reg.name for _, cmd_regs in imported_commands
-            for cmd_reg in cmd_regs
-            )
+        imported_command_names: str = self.command_names_formatted([cmd_reg for _, cmd_reg in imported_commands])
         logger.info(f"Imported command names: {imported_command_names}.")
     
-    def import_commands_from_path(self: Self, path: Path) -> list[tuple[ModuleType, CommandRegister]]:
+    def import_commands_from_path(self: Self, path: Path, recursive: bool = True) -> list[tuple[ModuleType, CommandRegister]]:
         imported_commands: list[tuple[ModuleType, CommandRegister]] = []
         for file in path.iterdir():
             if file.name.startswith("__") or file.suffix != ".py":
                 continue
-            if file.is_dir():
+            if file.is_dir() and recursive:
                 imported_commands.extend(
                     self.import_commands_from_path(file)
                     )
@@ -136,7 +145,13 @@ class Bot(Client):
             self.add_callback_query_handler(register.handler, self.group)
     
     def add_message_handler(self: Self, handler: MessageHandler, group: int = 0) -> None:
+        if not isinstance(handler, MessageHandler):
+            raise TypeError(f"handler must be an instance of MessageHandler (got {type(handler)} instead)")
+        
         super().add_handler(handler, group)
     
     def add_callback_query_handler(self: Self, handler: CallbackQueryHandler, group: int = 0) -> None:
+        if not isinstance(handler, CallbackQueryHandler):
+            raise TypeError(f"handler must be an instance of CallbackQueryHandler (got {type(handler)} instead)")
+        
         super().add_handler(handler, group)
